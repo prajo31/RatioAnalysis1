@@ -27,6 +27,7 @@ Run with:  streamlit run "AI Gemini.py"
 """
 import os
 import io
+import time
 import pandas as pd
 import streamlit as st
 import yfinance as yf
@@ -689,9 +690,24 @@ def _extract_grounding_sources(response):
     except Exception:
         pass
     return sources
+def _get_fallback_key():
+    """Shared class demo Gemini key, read from Streamlit secrets (GEMINI_API_KEY_DEMO),
+    if the instructor has configured one. Lets the app work in class before every
+    student has set up their own free key. Returns None if not configured or if
+    st.secrets isn't available (e.g. running locally with no secrets.toml)."""
+    try:
+        return st.secrets.get("GEMINI_API_KEY_DEMO", None)
+    except Exception:
+        return None
 def get_ai_interpretation(prompt_text, api_key, model="gemini-2.5-flash", use_search=True):
     """Calls the Gemini API and returns (text, sources, warning, error). Never raises —
     Streamlit apps should degrade gracefully in front of a classroom.
+
+    If `api_key` is blank, silently falls back to the shared class demo key (see
+    _get_fallback_key) when the instructor has configured one in Streamlit secrets —
+    a small note gets appended to the response so the user knows they're on the
+    shared key and should add their own for uninterrupted access.
+
     If use_search is True, first tries `model` with Google Search grounding enabled so
     the AI can cite real, current sources for the optional 'Recent context' section. If
     that model/feature isn't available for this API key (e.g. gemini-2.5-flash has been
@@ -700,6 +716,10 @@ def get_ai_interpretation(prompt_text, api_key, model="gemini-2.5-flash", use_se
     analysis itself never depends on search, only the optional context blurb does."""
     if not _GENAI_AVAILABLE:
         return None, [], None, "The 'google-genai' package isn't installed. Add 'google-genai' to requirements.txt."
+    using_demo_key = False
+    if not api_key:
+        api_key = _get_fallback_key()
+        using_demo_key = bool(api_key)
     if not api_key:
         return None, [], None, "No API key provided. Add a free Gemini key in the sidebar to use this feature."
     client = genai.Client(api_key=api_key)
@@ -710,26 +730,67 @@ def get_ai_interpretation(prompt_text, api_key, model="gemini-2.5-flash", use_se
                 tools=[genai_types.Tool(google_search=genai_types.GoogleSearch())]
             )
         return client.models.generate_content(model=m, contents=prompt_text, config=config)
+    def _call_with_retry(m, grounded, attempts=3, backoff=2):
+        """Retries only on transient server-side errors (503 overloaded / 429 rate
+        limit) — Google's free-tier models get deprioritized under load and these
+        usually clear within a few seconds. Anything else (bad key, model not found,
+        etc.) fails fast so we move on to the fallback model instead of stalling."""
+        last_err = None
+        for i in range(attempts):
+            try:
+                return _call(m, grounded)
+            except Exception as e:
+                last_err = e
+                transient = any(tok in str(e) for tok in ("503", "UNAVAILABLE", "429", "RESOURCE_EXHAUSTED"))
+                if not transient or i == attempts - 1:
+                    raise
+                time.sleep(backoff * (i + 1))
+        raise last_err
+    demo_note = (
+        "🔑 *This response used the shared class demo key. For uninterrupted access, "
+        "add your own free Gemini key in the sidebar — it takes about a minute at "
+        "[aistudio.google.com/apikey](https://aistudio.google.com/apikey).*"
+    ) if using_demo_key else None
+    def _combine(*notes):
+        parts = [n for n in notes if n]
+        return "\n\n".join(parts) if parts else None
+    def _quota_message(e):
+        err = str(e)
+        if using_demo_key and any(tok in err.lower() for tok in ("429", "quota", "rate", "resource_exhausted")):
+            return (
+                "⚠️ The shared class demo key has hit its rate limit for now. Add your "
+                "own free Gemini key in the sidebar to continue — it takes about a "
+                "minute at [aistudio.google.com/apikey](https://aistudio.google.com/apikey), "
+                "no credit card required."
+            )
+        return None
     if use_search:
         try:
-            response = _call(model, True)
-            return response.text, _extract_grounding_sources(response), None, None
+            response = _call_with_retry(model, True)
+            return response.text, _extract_grounding_sources(response), demo_note, None
         except Exception as e1:
             try:
-                response = _call("gemini-3.6-flash", False)
-                warning = (
+                response = _call_with_retry("gemini-3.6-flash", False)
+                warning = _combine(
                     f"⚠️ Web search wasn't available with {model} for this API key "
                     f"({e1}) — fell back to gemini-3.6-flash without search. The ratio "
                     "analysis below is unaffected; only the optional 'Recent context' "
-                    "section is skipped."
+                    "section is skipped.",
+                    demo_note,
                 )
                 return response.text, [], warning, None
             except Exception as e2:
+                quota_msg = _quota_message(e2)
+                if quota_msg:
+                    return None, [], None, quota_msg
                 return None, [], None, f"AI request failed: {e2}"
     try:
-        response = _call("gemini-3.6-flash", False)
-        return response.text, [], None, None
+        response = _call_with_retry("gemini-3.6-flash", False)
+        return response.text, [], demo_note, None
     except Exception as e:
+        quota_msg = _quota_message(e)
+        if quota_msg:
+            return None, [], None, quota_msg
         return None, [], None, f"AI request failed: {e}"
 # ============================================================
 # SIDEBAR
@@ -762,12 +823,30 @@ with st.sidebar:
     st.caption("Ratio thresholds and benchmark values are illustrative educational references, not official current industry data.")
     st.divider()
     st.markdown("**AI Interpretation (optional, free tier)**")
-    ai_api_key = st.text_input(
+    ai_api_key_pasted = st.text_input(
         "Gemini API key", type="password",
         value=os.environ.get("GEMINI_API_KEY", ""),
         help="Free — no credit card needed. Get one at aistudio.google.com/apikey. "
-             "Leave blank to skip the AI Insight feature entirely.",
+             "Leave blank to try the shared class demo key (if your instructor set "
+             "one up) or to skip the AI Insight feature entirely.",
     )
+    ai_key_file = st.file_uploader(
+        "…or upload your key as a .txt file", type=["txt"],
+        help="An alternative to pasting the key above — useful if you'd rather not "
+             "type it into a browser field. The file's contents (just the key, "
+             "nothing else) are read once and not saved anywhere.",
+    )
+    if ai_key_file is not None:
+        ai_api_key = ai_key_file.read().decode("utf-8").strip()
+        st.success("Key loaded from file (not displayed).")
+    else:
+        ai_api_key = ai_api_key_pasted
+    if not ai_api_key:
+        st.caption(
+            "🔑 No key entered — if your instructor configured a shared class demo "
+            "key (via Streamlit secrets), the AI Insight feature will use that "
+            "automatically and let you know."
+        )
     ai_use_search = st.checkbox(
         "🔍 Let the AI search the web for recent context (experimental)",
         value=False,
