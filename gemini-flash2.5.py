@@ -704,31 +704,38 @@ def _get_fallback_key():
         return st.secrets.get("GEMINI_API_KEY_DEMO", None)
     except Exception:
         return None
-def get_ai_interpretation(prompt_text, api_key, model="gemini-2.5-flash", use_search=True):
-    """Calls the Gemini API and returns (text, sources, warning, error). Never raises —
-    Streamlit apps should degrade gracefully in front of a classroom.
+def get_ai_interpretation(prompt_text, api_key, model="gemini-2.5-flash", use_search=True, forced_model=None):
+    """Calls the Gemini API and returns (text, sources, warning, error, model_used).
+    Never raises — Streamlit apps should degrade gracefully in front of a classroom.
 
     If `api_key` is blank, silently falls back to the shared class demo key (see
     _get_fallback_key) when the instructor has configured one in Streamlit secrets —
     a small note gets appended to the response so the user knows they're on the
     shared key and should add their own for uninterrupted access.
 
-    If use_search is True, first tries `model` with Google Search grounding enabled so
-    the AI can cite real, current sources for the optional 'Recent context' section. If
-    that model/feature isn't available for this API key (e.g. gemini-2.5-flash has been
-    deprecated for some keys, or grounding needs a paid tier), it automatically falls
-    back to plain text generation with no web search — trying each model in
-    TEXT_FALLBACK_MODELS in order until one works, since Google has a track record of
-    deprecating individual free-tier models with little notice. The ratio analysis
-    itself never depends on search, only the optional context blurb does."""
+    If `forced_model` is set, ONLY that exact model is tried (with retries on
+    transient errors) — no automatic fallback to another model. This is for manually
+    testing/comparing which specific models currently work for a given API key; a
+    failure here is reported as a real error rather than silently masked by falling
+    back, which is the whole point of forcing a single model.
+
+    Otherwise (forced_model is None), and if use_search is True, first tries `model`
+    with Google Search grounding enabled so the AI can cite real, current sources for
+    the optional 'Recent context' section. If that model/feature isn't available for
+    this API key (e.g. gemini-2.5-flash has been deprecated for some keys, or
+    grounding needs a paid tier), it automatically falls back to plain text
+    generation with no web search — trying each model in TEXT_FALLBACK_MODELS in
+    order until one works, since Google has a track record of deprecating individual
+    free-tier models with little notice. The ratio analysis itself never depends on
+    search, only the optional context blurb does."""
     if not _GENAI_AVAILABLE:
-        return None, [], None, "The 'google-genai' package isn't installed. Add 'google-genai' to requirements.txt."
+        return None, [], None, "The 'google-genai' package isn't installed. Add 'google-genai' to requirements.txt.", None
     using_demo_key = False
     if not api_key:
         api_key = _get_fallback_key()
         using_demo_key = bool(api_key)
     if not api_key:
-        return None, [], None, "No API key provided. Add a free Gemini key in the sidebar to use this feature."
+        return None, [], None, "No API key provided. Add a free Gemini key in the sidebar to use this feature.", None
     client = genai.Client(api_key=api_key)
     def _call(m, grounded):
         config = None
@@ -781,10 +788,20 @@ def get_ai_interpretation(prompt_text, api_key, model="gemini-2.5-flash", use_se
                 "no credit card required."
             )
         return None
+    if forced_model:
+        try:
+            response = _call_with_retry(forced_model, use_search)
+            sources = _extract_grounding_sources(response) if use_search else []
+            return response.text, sources, demo_note, None, forced_model
+        except Exception as e:
+            quota_msg = _quota_message(e)
+            if quota_msg:
+                return None, [], None, quota_msg, None
+            return None, [], None, f"{forced_model} failed: {e}", None
     if use_search:
         try:
             response = _call_with_retry(model, True)
-            return response.text, _extract_grounding_sources(response), demo_note, None
+            return response.text, _extract_grounding_sources(response), demo_note, None, model
         except Exception as e1:
             try:
                 model_used, response = _call_first_available(TEXT_FALLBACK_MODELS, False)
@@ -795,20 +812,20 @@ def get_ai_interpretation(prompt_text, api_key, model="gemini-2.5-flash", use_se
                     "section is skipped.",
                     demo_note,
                 )
-                return response.text, [], warning, None
+                return response.text, [], warning, None, model_used
             except Exception as e2:
                 quota_msg = _quota_message(e2)
                 if quota_msg:
-                    return None, [], None, quota_msg
-                return None, [], None, f"AI request failed: {e2}"
+                    return None, [], None, quota_msg, None
+                return None, [], None, f"AI request failed: {e2}", None
     try:
         model_used, response = _call_first_available(TEXT_FALLBACK_MODELS, False)
-        return response.text, [], demo_note, None
+        return response.text, [], demo_note, None, model_used
     except Exception as e:
         quota_msg = _quota_message(e)
         if quota_msg:
-            return None, [], None, quota_msg
-        return None, [], None, f"AI request failed: {e}"
+            return None, [], None, quota_msg, None
+        return None, [], None, f"AI request failed: {e}", None
 # ============================================================
 # SIDEBAR
 # ============================================================
@@ -872,9 +889,20 @@ with st.sidebar:
              "Tries gemini-2.5-flash, which currently offers free-tier search grounding, "
              "but Google has been deprecating this model for some API keys, and grounding "
              "availability can change without notice. If it's unavailable for your key, the "
-             "app automatically falls back to gemini-3.6-flash with search turned off — the "
-             "core ratio analysis still works either way.",
+             "app automatically falls back with search turned off — the core ratio "
+             "analysis still works either way.",
     )
+    ai_model_choice = st.selectbox(
+        "Model to use",
+        options=["Auto (recommended)", "gemini-2.5-flash"] + TEXT_FALLBACK_MODELS,
+        index=0,
+        help="Leave on Auto to let the app pick the best available model and fall "
+             "back automatically if one fails. Pick a specific model to test it "
+             "directly with your key — a failure will show as a real error instead "
+             "of being silently covered up by a fallback, which is the point if "
+             "you're checking which models currently work for you.",
+    )
+    ai_forced_model = None if ai_model_choice == "Auto (recommended)" else ai_model_choice
 st.title("🏢 Real-Company Ratio Comparison Tool")
 st.caption("Pull real financial statements, compare companies over the years you choose, and benchmark against industry norms.")
 # ============================================================
@@ -1167,11 +1195,13 @@ with tab_summary:
         tuple((c["y1_label"], c["y2_label"]) for c in companies),
         benchmark_sector,
     )
+    if ai_forced_model:
+        st.caption(f"🧪 Testing mode: forcing **{ai_forced_model}** — no automatic fallback if it fails.")
     if st.button("Generate AI Analysis", key="ai_generate_btn"):
         prompt_text = build_ratio_prompt(companies, benchmark_sector, matrix_rows)
-        with st.spinner("Asking Gemini..."):
-            text, sources, warn, err = get_ai_interpretation(
-                prompt_text, ai_api_key, use_search=ai_use_search
+        with st.spinner(f"Asking Gemini{f' ({ai_forced_model})' if ai_forced_model else ''}..."):
+            text, sources, warn, err, model_used = get_ai_interpretation(
+                prompt_text, ai_api_key, use_search=ai_use_search, forced_model=ai_forced_model
             )
         if err:
             st.error(err)
@@ -1179,6 +1209,7 @@ with tab_summary:
             st.session_state["ai_analysis_text"] = text
             st.session_state["ai_analysis_sources"] = sources
             st.session_state["ai_analysis_warning"] = warn
+            st.session_state["ai_analysis_model"] = model_used
             st.session_state["ai_prompt_text"] = prompt_text
             st.session_state["ai_analysis_signature"] = current_signature
     if "ai_analysis_text" in st.session_state:
@@ -1188,6 +1219,8 @@ with tab_summary:
                 "analysis was generated — click Generate again for it to match "
                 "what's currently shown above."
             )
+        if st.session_state.get("ai_analysis_model"):
+            st.caption(f"✅ Model that responded: `{st.session_state['ai_analysis_model']}`")
         if st.session_state.get("ai_analysis_warning"):
             st.info(st.session_state["ai_analysis_warning"])
         with st.container(border=True):
