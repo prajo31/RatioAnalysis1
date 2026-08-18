@@ -237,64 +237,79 @@ def compute_ratios(d, market_cap=None):
     r["book_to_market"] = safe_div(d.get("equity"), market_cap)
     return r
 # ============================================================
-# INDUSTRY BENCHMARKS (illustrative reference points, editable in-app)
-# General educational approximations, NOT official current industry
-# data — no reliable free live source exists for a full ratio suite.
-# For rigorous work, point students to Damodaran Online (NYU Stern,
-# pages.stern.nyu.edu/~adamodar) or paid sources like CSIMarket /
-# IBISWorld, and let them overwrite these numbers.
+# INDUSTRY BENCHMARKS
+# 15 of 21 ratios below are REAL sector-aggregate data — current ratio,
+# quick ratio, gross/operating/net margin, ROA, ROE, P/E, P/S, P/B are
+# sourced directly from Finviz.com sector groups (as of Aug 18, 2026).
+# Equity multiplier, debt ratio, debt-to-equity, asset turnover, and
+# book-to-market are DERIVED from those real ROE/ROA/P-B figures via
+# the DuPont identity (ROE = Net Margin x Asset Turnover x Equity
+# Multiplier) — legitimate math on real data, not invented numbers.
+# The remaining 6 ratios (cash ratio, inventory turnover, DIO,
+# receivables turnover, DSO, interest coverage) have no reliable free
+# sector-level source and stay as illustrative, instructor-editable
+# estimates — see the Source column in the benchmark table below.
+# This is a DATED SNAPSHOT, not a live feed — refresh periodically by
+# checking finviz.com/groups.ashx?g=sector&v=160 (ROA/ROE/margins/
+# ratios) and v=120 (P/E, P/S, P/B) and updating the numbers below.
 # ============================================================
+REAL_RATIO_KEYS = {
+    "current_ratio", "quick_ratio", "gross_margin", "operating_margin", "net_margin",
+    "roa", "roe", "asset_turnover", "debt_ratio", "debt_to_equity", "equity_multiplier",
+    "pe_ratio", "ps_ratio", "pb_ratio", "book_to_market",
+}
+BENCHMARK_AS_OF = "August 18, 2026"
 BENCHMARKS = {
-    "Technology": dict(current_ratio=2.5, quick_ratio=2.2, cash_ratio=1.0, gross_margin=0.55, operating_margin=0.20,
-                        net_margin=0.15, roa=0.10, roe=0.20, asset_turnover=0.6, inventory_turnover=8, dio=45,
-                        receivables_turnover=8, dso=45, debt_ratio=0.40, debt_to_equity=0.7, equity_multiplier=1.8,
-                        interest_coverage=15, pe_ratio=30, ps_ratio=6, pb_ratio=8, book_to_market=0.13),
-    "Healthcare": dict(current_ratio=1.8, quick_ratio=1.4, cash_ratio=0.5, gross_margin=0.55, operating_margin=0.15,
-                        net_margin=0.10, roa=0.07, roe=0.15, asset_turnover=0.7, inventory_turnover=5, dio=73,
-                        receivables_turnover=7, dso=52, debt_ratio=0.45, debt_to_equity=0.8, equity_multiplier=1.9,
-                        interest_coverage=8, pe_ratio=22, ps_ratio=3, pb_ratio=4, book_to_market=0.25),
-    "Financial Services": dict(current_ratio=None, quick_ratio=None, cash_ratio=None, gross_margin=None,
-                                operating_margin=None, net_margin=0.20, roa=0.012, roe=0.11, asset_turnover=None,
+    "Technology": dict(current_ratio=2.27, quick_ratio=1.98, cash_ratio=1.0, gross_margin=0.4910, operating_margin=0.2732,
+                        net_margin=0.2220, roa=0.1334, roe=0.2889, asset_turnover=0.60, inventory_turnover=8, dio=45,
+                        receivables_turnover=8, dso=45, debt_ratio=0.5382, debt_to_equity=1.17, equity_multiplier=2.17,
+                        interest_coverage=15, pe_ratio=34.45, ps_ratio=8.25, pb_ratio=11.0, book_to_market=0.0909),
+    "Healthcare": dict(current_ratio=2.13, quick_ratio=1.88, cash_ratio=0.5, gross_margin=0.3517, operating_margin=0.0958,
+                        net_margin=0.0466, roa=0.0389, roe=0.0980, asset_turnover=0.83, inventory_turnover=5, dio=73,
+                        receivables_turnover=7, dso=52, debt_ratio=0.6031, debt_to_equity=1.52, equity_multiplier=2.52,
+                        interest_coverage=8, pe_ratio=32.50, ps_ratio=1.97, pb_ratio=4.82, book_to_market=0.2075),
+    "Financial Services": dict(current_ratio=2.20, quick_ratio=3.32, cash_ratio=None, gross_margin=0.4077,
+                                operating_margin=0.1972, net_margin=0.1481, roa=0.0129, roe=0.1261, asset_turnover=0.09,
                                 inventory_turnover=None, dio=None, receivables_turnover=None, dso=None,
-                                debt_ratio=0.88, debt_to_equity=7.0, equity_multiplier=10.0, interest_coverage=2.5,
-                                pe_ratio=12, ps_ratio=3, pb_ratio=1.2, book_to_market=0.83),
-    "Consumer Cyclical": dict(current_ratio=1.4, quick_ratio=0.5, cash_ratio=0.2, gross_margin=0.35, operating_margin=0.08,
-                               net_margin=0.05, roa=0.06, roe=0.18, asset_turnover=1.8, inventory_turnover=6, dio=61,
-                               receivables_turnover=20, dso=18, debt_ratio=0.55, debt_to_equity=1.3, equity_multiplier=2.5,
-                               interest_coverage=6, pe_ratio=20, ps_ratio=1.2, pb_ratio=5, book_to_market=0.20),
-    "Consumer Defensive": dict(current_ratio=1.0, quick_ratio=0.5, cash_ratio=0.15, gross_margin=0.30, operating_margin=0.10,
-                                net_margin=0.06, roa=0.07, roe=0.20, asset_turnover=1.2, inventory_turnover=8, dio=46,
-                                receivables_turnover=12, dso=30, debt_ratio=0.55, debt_to_equity=1.4, equity_multiplier=2.6,
-                                interest_coverage=8, pe_ratio=20, ps_ratio=1.5, pb_ratio=5, book_to_market=0.20),
-    "Industrials": dict(current_ratio=1.5, quick_ratio=1.0, cash_ratio=0.3, gross_margin=0.30, operating_margin=0.11,
-                         net_margin=0.07, roa=0.06, roe=0.15, asset_turnover=0.8, inventory_turnover=6, dio=61,
-                         receivables_turnover=8, dso=46, debt_ratio=0.50, debt_to_equity=1.0, equity_multiplier=2.2,
-                         interest_coverage=7, pe_ratio=18, ps_ratio=1.5, pb_ratio=3, book_to_market=0.33),
-    "Energy": dict(current_ratio=1.2, quick_ratio=0.9, cash_ratio=0.3, gross_margin=0.35, operating_margin=0.15,
-                    net_margin=0.08, roa=0.06, roe=0.12, asset_turnover=0.5, inventory_turnover=10, dio=37,
-                    receivables_turnover=10, dso=37, debt_ratio=0.45, debt_to_equity=0.8, equity_multiplier=1.9,
-                    interest_coverage=6, pe_ratio=12, ps_ratio=1.2, pb_ratio=1.8, book_to_market=0.55),
-    "Utilities": dict(current_ratio=0.9, quick_ratio=0.7, cash_ratio=0.1, gross_margin=0.40, operating_margin=0.20,
-                       net_margin=0.10, roa=0.03, roe=0.10, asset_turnover=0.3, inventory_turnover=8, dio=46,
-                       receivables_turnover=10, dso=37, debt_ratio=0.60, debt_to_equity=1.5, equity_multiplier=2.8,
-                       interest_coverage=3.5, pe_ratio=17, ps_ratio=2, pb_ratio=1.8, book_to_market=0.55),
-    "Real Estate": dict(current_ratio=1.0, quick_ratio=0.8, cash_ratio=0.2, gross_margin=0.50, operating_margin=0.35,
-                         net_margin=0.20, roa=0.03, roe=0.08, asset_turnover=0.15, inventory_turnover=None, dio=None,
-                         receivables_turnover=15, dso=24, debt_ratio=0.55, debt_to_equity=1.3, equity_multiplier=2.3,
-                         interest_coverage=3, pe_ratio=25, ps_ratio=6, pb_ratio=1.8, book_to_market=0.55),
-    "Basic Materials": dict(current_ratio=1.6, quick_ratio=1.0, cash_ratio=0.3, gross_margin=0.25, operating_margin=0.12,
-                             net_margin=0.07, roa=0.06, roe=0.13, asset_turnover=0.7, inventory_turnover=6, dio=61,
-                             receivables_turnover=8, dso=46, debt_ratio=0.45, debt_to_equity=0.8, equity_multiplier=1.9,
-                             interest_coverage=6, pe_ratio=14, ps_ratio=1.2, pb_ratio=1.8, book_to_market=0.55),
-    "Communication Services": dict(current_ratio=1.0, quick_ratio=0.9, cash_ratio=0.3, gross_margin=0.55, operating_margin=0.18,
-                                    net_margin=0.10, roa=0.05, roe=0.12, asset_turnover=0.4, inventory_turnover=None,
-                                    dio=None, receivables_turnover=8, dso=46, debt_ratio=0.55, debt_to_equity=1.3,
-                                    equity_multiplier=2.3, interest_coverage=5, pe_ratio=18, ps_ratio=2.5, pb_ratio=3,
-                                    book_to_market=0.33),
-    "General / Unknown": dict(current_ratio=1.5, quick_ratio=1.0, cash_ratio=0.3, gross_margin=0.35, operating_margin=0.12,
-                               net_margin=0.08, roa=0.06, roe=0.14, asset_turnover=0.8, inventory_turnover=7, dio=52,
-                               receivables_turnover=9, dso=40, debt_ratio=0.50, debt_to_equity=1.0, equity_multiplier=2.0,
-                               interest_coverage=6, pe_ratio=18, ps_ratio=2, pb_ratio=3, book_to_market=0.33),
+                                debt_ratio=0.8977, debt_to_equity=8.78, equity_multiplier=9.78, interest_coverage=2.5,
+                                pe_ratio=16.98, ps_ratio=2.37, pb_ratio=2.26, book_to_market=0.4425),
+    "Consumer Cyclical": dict(current_ratio=1.43, quick_ratio=1.05, cash_ratio=0.2, gross_margin=0.2934, operating_margin=0.0755,
+                               net_margin=0.0601, roa=0.0510, roe=0.1260, asset_turnover=0.85, inventory_turnover=6, dio=61,
+                               receivables_turnover=20, dso=18, debt_ratio=0.5952, debt_to_equity=1.47, equity_multiplier=2.47,
+                               interest_coverage=6, pe_ratio=25.56, ps_ratio=1.88, pb_ratio=4.28, book_to_market=0.2336),
+    "Consumer Defensive": dict(current_ratio=1.07, quick_ratio=0.66, cash_ratio=0.15, gross_margin=0.2819, operating_margin=0.0904,
+                                net_margin=0.0516, roa=0.0608, roe=0.1589, asset_turnover=1.18, inventory_turnover=8, dio=46,
+                                receivables_turnover=12, dso=30, debt_ratio=0.6174, debt_to_equity=1.61, equity_multiplier=2.61,
+                                interest_coverage=8, pe_ratio=26.16, ps_ratio=1.40, pb_ratio=5.11, book_to_market=0.1957),
+    "Industrials": dict(current_ratio=2.29, quick_ratio=1.94, cash_ratio=0.3, gross_margin=0.2484, operating_margin=0.1144,
+                         net_margin=0.0763, roa=0.0539, roe=0.1619, asset_turnover=0.71, inventory_turnover=6, dio=61,
+                         receivables_turnover=8, dso=46, debt_ratio=0.6671, debt_to_equity=2.00, equity_multiplier=3.00,
+                         interest_coverage=7, pe_ratio=40.58, ps_ratio=3.35, pb_ratio=6.93, book_to_market=0.1443),
+    "Energy": dict(current_ratio=1.34, quick_ratio=1.09, cash_ratio=0.3, gross_margin=0.2046, operating_margin=0.1515,
+                    net_margin=0.0923, roa=0.0621, roe=0.1479, asset_turnover=0.67, inventory_turnover=10, dio=37,
+                    receivables_turnover=10, dso=37, debt_ratio=0.5801, debt_to_equity=1.38, equity_multiplier=2.38,
+                    interest_coverage=6, pe_ratio=15.33, ps_ratio=1.33, pb_ratio=2.27, book_to_market=0.4405),
+    "Utilities": dict(current_ratio=0.93, quick_ratio=0.80, cash_ratio=0.1, gross_margin=0.2840, operating_margin=0.2070,
+                       net_margin=0.1174, roa=0.0254, roe=0.0994, asset_turnover=0.22, inventory_turnover=8, dio=46,
+                       receivables_turnover=10, dso=37, debt_ratio=0.7445, debt_to_equity=2.91, equity_multiplier=3.91,
+                       interest_coverage=3.5, pe_ratio=19.30, ps_ratio=2.44, pb_ratio=2.09, book_to_market=0.4785),
+    "Real Estate": dict(current_ratio=2.08, quick_ratio=2.05, cash_ratio=0.2, gross_margin=0.4037, operating_margin=0.2310,
+                         net_margin=0.1084, roa=0.0224, roe=0.0550, asset_turnover=0.21, inventory_turnover=None, dio=None,
+                         receivables_turnover=15, dso=24, debt_ratio=0.5927, debt_to_equity=1.46, equity_multiplier=2.46,
+                         interest_coverage=3, pe_ratio=32.94, ps_ratio=4.41, pb_ratio=2.50, book_to_market=0.4000),
+    "Basic Materials": dict(current_ratio=2.37, quick_ratio=1.82, cash_ratio=0.3, gross_margin=0.2780, operating_margin=0.1885,
+                             net_margin=0.0969, roa=0.0550, roe=0.1135, asset_turnover=0.57, inventory_turnover=6, dio=61,
+                             receivables_turnover=8, dso=46, debt_ratio=0.5154, debt_to_equity=1.06, equity_multiplier=2.06,
+                             interest_coverage=6, pe_ratio=22.18, ps_ratio=2.38, pb_ratio=2.85, book_to_market=0.3509),
+    "Communication Services": dict(current_ratio=2.40, quick_ratio=2.34, cash_ratio=0.3, gross_margin=0.5182, operating_margin=0.2446,
+                                    net_margin=0.2597, roa=0.1260, roe=0.2481, asset_turnover=0.49, inventory_turnover=None,
+                                    dio=None, receivables_turnover=8, dso=46, debt_ratio=0.4921, debt_to_equity=0.97,
+                                    equity_multiplier=1.97, interest_coverage=5, pe_ratio=29.83, ps_ratio=4.85, pb_ratio=6.82,
+                                    book_to_market=0.1466),
+    "General / Unknown": dict(current_ratio=1.86, quick_ratio=1.72, cash_ratio=0.3, gross_margin=0.3421, operating_margin=0.1699,
+                               net_margin=0.1163, roa=0.0583, roe=0.1476, asset_turnover=0.58, inventory_turnover=7, dio=52,
+                               receivables_turnover=9, dso=40, debt_ratio=0.6221, debt_to_equity=2.21, equity_multiplier=3.21,
+                               interest_coverage=6, pe_ratio=26.89, ps_ratio=3.15, pb_ratio=4.63, book_to_market=0.2846),
 }
 # ============================================================
 # YFINANCE FETCH LOGIC
@@ -634,21 +649,23 @@ def build_ratio_prompt(companies, benchmark_sector, matrix_rows):
             ci += 2
         bench = fmt(row["benchmark"], row["suffix"])
         lines.append(f"- {row['ratio']} ({row['category']}): " + "; ".join(vals) + f" | benchmark: {bench}")
-        lines += [
+    lines += [
         "",
         "Format your entire response in Markdown, structured exactly like this:",
         "",
         "For EACH company, write a '### TICKER' section header, then under it:",
-        "- **Strengths vs. benchmark:** 1-2 sentences citing specific ratios.",
-        "- **Weaknesses vs. benchmark:** 1-2 sentences citing specific ratios.",
-        "- **Notable year-over-year trend:** 1-2 sentences.",
         "",
-        "After all companies, add one final '### What to double-check' section "
-        "with 1-2 sentences on something a student should verify or be skeptical "
-        "of in this data.",
+        "1. A Markdown TABLE with columns: | Ratio | Latest Value | Benchmark | Assessment |",
+        "   Include the 6-8 ratios most relevant to that company's key strengths and "
+        "weaknesses, using ONLY the values given above. Never invent numbers. Assessment "
+        "column: 'Strength' or 'Weakness' for each row.",
         "",
-        "Do not invent numbers beyond what's given above. Keep the whole response "
-        "under 350 words total.",
+        "2. Below the table, a '**Notable year-over-year trend:**' line with 1-2 sentences.",
+        "",
+        "After all companies, add one final '### What to double-check' section with "
+        "1-2 sentences on something a student should verify or be skeptical of in this data.",
+        "",
+        "Keep prose under 300 words total (tables don't count toward that limit).",
     ]
     return "\n".join(lines)
 def get_ai_interpretation(prompt_text, api_key, model="gemini-3.6-flash"):
@@ -845,13 +862,15 @@ benchmark_sector = st.selectbox(
     sector_options, index=default_idx,
 )
 st.caption(
-    "These are illustrative educational reference points, not official current industry data — "
-    "edit any value below if you have more precise figures (e.g. from Damodaran Online at NYU Stern, "
-    "CSIMarket, or IBISWorld)."
+    f"📊 = real sector data (Finviz sector aggregates, as of {BENCHMARK_AS_OF}) or a DuPont-derived "
+    "value calculated from that real data. 📝 = illustrative estimate (Finviz doesn't publish this "
+    "ratio at the sector level). Edit any value below if you have more precise figures (e.g. from "
+    "Damodaran Online at NYU Stern, CSIMarket, or IBISWorld)."
 )
 bench_defaults = BENCHMARKS[benchmark_sector]
 bench_df = pd.DataFrame({
     "Ratio": [r["name"] for r in RATIO_DEFS],
+    "Source": ["📊 Real (Finviz)" if r["key"] in REAL_RATIO_KEYS else "📝 Illustrative" for r in RATIO_DEFS],
     "Format": [{"": "plain", "%": "percent (enter as fraction, e.g. 0.35)", "x": "multiple",
                 " days": "days"}[r["suffix"]] for r in RATIO_DEFS],
     "Benchmark Value": [bench_defaults.get(r["key"]) for r in RATIO_DEFS],
@@ -860,6 +879,7 @@ edited_bench = st.data_editor(
     bench_df, key=f"bench_editor_{benchmark_sector}", hide_index=True, num_rows="fixed", use_container_width=True,
     column_config={
         "Ratio": st.column_config.TextColumn(disabled=True),
+        "Source": st.column_config.TextColumn(disabled=True),
         "Format": st.column_config.TextColumn(disabled=True),
         "Benchmark Value": st.column_config.NumberColumn(format="%.4f"),
     },
@@ -872,6 +892,9 @@ def render_ratio_comparison(rdef):
     st.markdown(f"#### {rdef['name']}")
     st.caption(f"Formula: {rdef['formula']}")
     st.caption(rdef["guide"])
+    src = ("📊 Benchmark is real sector data (Finviz)" if rdef["key"] in REAL_RATIO_KEYS
+           else "📝 Benchmark is an illustrative estimate")
+    st.caption(src)
     is_valuation = rdef["category"] == "Market Valuation"
     labels = LEVEL_LABEL_VALUATION if is_valuation else LEVEL_LABEL
     bench_val = benchmark.get(rdef["key"])
@@ -1004,8 +1027,7 @@ with tab_summary:
                 "analysis was generated — click Generate again for it to match "
                 "what's currently shown above."
             )
-        with st.container(border=True):             
-            st.markdown(st.session_state["ai_analysis_text"])
+        st.info(st.session_state["ai_analysis_text"])
         with st.expander("📋 Exact prompt sent to the AI (for your disclosure statement)"):
             st.code(st.session_state["ai_prompt_text"], language="text")
         st.markdown("**Your verification** — required before you use this in an assignment:")
