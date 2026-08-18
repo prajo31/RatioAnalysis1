@@ -643,7 +643,7 @@ def build_ratio_prompt(companies, benchmark_sector, matrix_rows):
         "beyond what's given above.",
     ]
     return "\n".join(lines)
-def get_ai_interpretation(prompt_text, api_key, model="gemini-2.5-flash"):
+def get_ai_interpretation(prompt_text, api_key, model="gemini-3.6-flash"):
     """Calls the Gemini API and returns (text, error). Never raises —
     Streamlit apps should degrade gracefully in front of a classroom."""
     if not _GENAI_AVAILABLE:
