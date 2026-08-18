@@ -1,6 +1,8 @@
-streamlit>=1.30
-pandas>=2.0
-yfinance>=0.2.40
-openpyxl>=3.1
-reportlab>=4.0
-google-genai
+streamlit
+streamlit-authenticator
+pyyaml
+bcrypt
+pandas
+yfinance
+openpyxl
+reportlab
