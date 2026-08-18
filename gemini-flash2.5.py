@@ -690,6 +690,11 @@ def _extract_grounding_sources(response):
     except Exception:
         pass
     return sources
+# Plain (non-grounded) text models to try in order when the search-capable model
+# is unavailable, or when web search is off entirely. gemini-3.6-flash is current
+# as of Aug 2026; the other two are kept as a safety net in case Google deprecates
+# it for some keys the way it did with gemini-2.5-flash.
+TEXT_FALLBACK_MODELS = ["gemini-3.6-flash", "gemini-3.5-flash", "gemini-3.5-flash-lite"]
 def _get_fallback_key():
     """Shared class demo Gemini key, read from Streamlit secrets (GEMINI_API_KEY_DEMO),
     if the instructor has configured one. Lets the app work in class before every
@@ -712,8 +717,10 @@ def get_ai_interpretation(prompt_text, api_key, model="gemini-2.5-flash", use_se
     the AI can cite real, current sources for the optional 'Recent context' section. If
     that model/feature isn't available for this API key (e.g. gemini-2.5-flash has been
     deprecated for some keys, or grounding needs a paid tier), it automatically falls
-    back to gemini-3.6-flash with no web search rather than failing outright — the ratio
-    analysis itself never depends on search, only the optional context blurb does."""
+    back to plain text generation with no web search — trying each model in
+    TEXT_FALLBACK_MODELS in order until one works, since Google has a track record of
+    deprecating individual free-tier models with little notice. The ratio analysis
+    itself never depends on search, only the optional context blurb does."""
     if not _GENAI_AVAILABLE:
         return None, [], None, "The 'google-genai' package isn't installed. Add 'google-genai' to requirements.txt."
     using_demo_key = False
@@ -746,6 +753,16 @@ def get_ai_interpretation(prompt_text, api_key, model="gemini-2.5-flash", use_se
                     raise
                 time.sleep(backoff * (i + 1))
         raise last_err
+    def _call_first_available(models, grounded):
+        """Tries each model in order, returning (model_used, response) from the
+        first one that succeeds. Raises the last error if every model fails."""
+        last_err = None
+        for m in models:
+            try:
+                return m, _call_with_retry(m, grounded)
+            except Exception as e:
+                last_err = e
+        raise last_err
     demo_note = (
         "🔑 *This response used the shared class demo key. For uninterrupted access, "
         "add your own free Gemini key in the sidebar — it takes about a minute at "
@@ -770,10 +787,10 @@ def get_ai_interpretation(prompt_text, api_key, model="gemini-2.5-flash", use_se
             return response.text, _extract_grounding_sources(response), demo_note, None
         except Exception as e1:
             try:
-                response = _call_with_retry("gemini-3.6-flash", False)
+                model_used, response = _call_first_available(TEXT_FALLBACK_MODELS, False)
                 warning = _combine(
                     f"⚠️ Web search wasn't available with {model} for this API key "
-                    f"({e1}) — fell back to gemini-3.6-flash without search. The ratio "
+                    f"({e1}) — fell back to {model_used} without search. The ratio "
                     "analysis below is unaffected; only the optional 'Recent context' "
                     "section is skipped.",
                     demo_note,
@@ -785,7 +802,7 @@ def get_ai_interpretation(prompt_text, api_key, model="gemini-2.5-flash", use_se
                     return None, [], None, quota_msg
                 return None, [], None, f"AI request failed: {e2}"
     try:
-        response = _call_with_retry("gemini-3.6-flash", False)
+        model_used, response = _call_first_available(TEXT_FALLBACK_MODELS, False)
         return response.text, [], demo_note, None
     except Exception as e:
         quota_msg = _quota_message(e)
