@@ -634,13 +634,21 @@ def build_ratio_prompt(companies, benchmark_sector, matrix_rows):
             ci += 2
         bench = fmt(row["benchmark"], row["suffix"])
         lines.append(f"- {row['ratio']} ({row['category']}): " + "; ".join(vals) + f" | benchmark: {bench}")
-    lines += [
+        lines += [
         "",
-        "Write a short (250-350 word) plain-English interpretation for finance "
-        "students: (1) each company's key strengths/weaknesses vs. the benchmark, "
-        "(2) one notable year-over-year trend per company, (3) one thing a student "
-        "should double-check or be skeptical of in this data. Do not invent numbers "
-        "beyond what's given above.",
+        "Format your entire response in Markdown, structured exactly like this:",
+        "",
+        "For EACH company, write a '### TICKER' section header, then under it:",
+        "- **Strengths vs. benchmark:** 1-2 sentences citing specific ratios.",
+        "- **Weaknesses vs. benchmark:** 1-2 sentences citing specific ratios.",
+        "- **Notable year-over-year trend:** 1-2 sentences.",
+        "",
+        "After all companies, add one final '### What to double-check' section "
+        "with 1-2 sentences on something a student should verify or be skeptical "
+        "of in this data.",
+        "",
+        "Do not invent numbers beyond what's given above. Keep the whole response "
+        "under 350 words total.",
     ]
     return "\n".join(lines)
 def get_ai_interpretation(prompt_text, api_key, model="gemini-3.6-flash"):
@@ -996,7 +1004,8 @@ with tab_summary:
                 "analysis was generated — click Generate again for it to match "
                 "what's currently shown above."
             )
-        st.info(st.session_state["ai_analysis_text"])
+        with st.container(border=True):             
+            st.markdown(st.session_state["ai_analysis_text"])
         with st.expander("📋 Exact prompt sent to the AI (for your disclosure statement)"):
             st.code(st.session_state["ai_prompt_text"], language="text")
         st.markdown("**Your verification** — required before you use this in an assignment:")
